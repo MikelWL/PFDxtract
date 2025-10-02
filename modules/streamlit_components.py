@@ -47,6 +47,7 @@ from .web_scraping import (
 
 from .vectorizer_models import get_vectorizer, render_topic_summary_tab
 from .bert_analysis import BERTResultsAnalyzer, ThemeAnalyzer
+from .llm_analysis import LLMThemeAnalyzer
 from .visualization import (
     plot_category_distribution,
     plot_coroner_areas,
@@ -1376,6 +1377,39 @@ def render_bert_analysis_tab(isPFD: bool, data: pd.DataFrame = None):
         )
         return
 
+    # Model selection section
+    st.subheader("Analysis Configuration")
+
+    model_col1, model_col2 = st.columns([2, 1])
+
+    with model_col1:
+        analysis_model = st.selectbox(
+            "🔧 Analysis Model",
+            options=["BERT (Current)", "LLM (Experimental)"],
+            index=0,
+            help="Choose between BERT-based analysis (current implementation) or LLM-based analysis (experimental)",
+            key=f"{report_key}_analysis_model"
+        )
+
+        # Show model-specific information
+        if analysis_model == "BERT (Current)":
+            st.info("🧠 **BERT Analysis**: Uses Bio_ClinicalBERT with keyword matching and semantic similarity")
+        else:
+            st.info("🤖 **LLM Analysis**: Uses Ollama with advanced prompt-based theme detection (Experimental)")
+
+    with model_col2:
+        if analysis_model == "LLM (Experimental)":
+            llm_model = st.selectbox(
+                "LLM Model",
+                options=["llama3.2", "llama3.1", "mistral"],
+                index=0,
+                help="Select the Ollama model to use for analysis",
+                key=f"{report_key}_llm_model"
+            )
+        else:
+            st.markdown("**BERT Model:**")
+            st.code("emilyalsentzer/Bio_ClinicalBERT", language="text")
+
     # Framework selection section
     st.subheader("Select Frameworks")
     
@@ -1542,16 +1576,24 @@ def render_bert_analysis_tab(isPFD: bool, data: pd.DataFrame = None):
                     st.warning("No documents selected for analysis.")
                     return
 
-                # Initialize the theme analyzer (with loading message in a spinner)
-                with st.spinner("Loading annotation model and tokenizer..."):
-                    # Initialize the analyzer
-                    theme_analyzer = ThemeAnalyzer(
-                        model_name="emilyalsentzer/Bio_ClinicalBERT"
-                    )
-                    
-                    # Mark as initialized
-                    st.session_state[bert_initialized_key] = True
-                st.success("Model and tokenizer loaded successfully!")
+                # Get selected model type and initialize appropriate analyzer
+                selected_model = st.session_state.get(f"{report_key}_analysis_model", "BERT (Current)")
+
+                if selected_model == "LLM (Experimental)":
+                    # Initialize LLM analyzer
+                    selected_llm_model = st.session_state.get(f"{report_key}_llm_model", "llama3.2")
+                    with st.spinner(f"Initializing LLM analyzer ({selected_llm_model})..."):
+                        theme_analyzer = LLMThemeAnalyzer(model_name=selected_llm_model)
+                        st.session_state[bert_initialized_key] = True
+                    st.success(f"🤖 LLM analyzer ({selected_llm_model}) initialized successfully!")
+                else:
+                    # Initialize BERT analyzer (original implementation)
+                    with st.spinner("Loading BERT model and tokenizer..."):
+                        theme_analyzer = ThemeAnalyzer(
+                            model_name="emilyalsentzer/Bio_ClinicalBERT"
+                        )
+                        st.session_state[bert_initialized_key] = True
+                    st.success("🧠 BERT model and tokenizer loaded successfully!")
                 # Set custom configuration
                 theme_analyzer.config[
                     "base_similarity_threshold"
@@ -1688,7 +1730,13 @@ def render_bert_analysis_tab(isPFD: bool, data: pd.DataFrame = None):
                 # Always regenerate HTML report when results are available
                 if "results_df" in st.session_state[bert_results_key] and "highlighted_texts" in st.session_state[bert_results_key]:
                     # Generate fresh HTML report based on current results
-                    theme_analyzer = ThemeAnalyzer()
+                    # Use the same analyzer type that was used for analysis
+                    analysis_model_used = st.session_state.get(f"{report_key}_analysis_model", "BERT (Current)")
+                    if analysis_model_used == "LLM (Experimental)":
+                        llm_model_used = st.session_state.get(f"{report_key}_llm_model", "llama3.2")
+                        theme_analyzer = LLMThemeAnalyzer(model_name=llm_model_used)
+                    else:
+                        theme_analyzer = ThemeAnalyzer()
                     
                     # Set custom frameworks if they exist
                     if st.session_state[custom_frameworks_key]:

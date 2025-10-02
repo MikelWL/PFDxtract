@@ -67,3 +67,11 @@ theme_analysis_report_20250718_162925.html
 
 *.html
 *.xlsx
+data/
+
+# Documentation directory (local development docs)
+docs/
+analysis_sprint21_vs_bert_final.py
+analysis_sprint21_vs_bert.py
+examine_files.py
+Sprint_2_1_Performance_Report.md
